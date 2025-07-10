@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
@@ -111,8 +112,10 @@ func GenerateTokens(c *gin.Context) {
 		return
 	}
 
+	encodedRefresh := base64.StdEncoding.EncodeToString([]byte(refreshString))
+
 	c.JSON(http.StatusOK, gin.H{
 		"access":  accessString,
-		"refresh": refreshString,
+		"refresh": encodedRefresh,
 	})
 }
