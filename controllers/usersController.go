@@ -121,3 +121,9 @@ func GenerateTokens(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{})
 }
+
+func Validate(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Logged in",
+	})
+}
