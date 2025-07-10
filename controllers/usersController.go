@@ -77,6 +77,7 @@ func GenerateTokens(c *gin.Context) {
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
 		"sub": user.ID,
 		"num": user.UserGuid,
+		"uip": c.ClientIP(),
 		"exp": time.Now().Add(time.Minute).Unix(),
 	})
 
@@ -114,8 +115,9 @@ func GenerateTokens(c *gin.Context) {
 
 	encodedRefresh := base64.StdEncoding.EncodeToString([]byte(refreshString))
 
-	c.JSON(http.StatusOK, gin.H{
-		"access":  accessString,
-		"refresh": encodedRefresh,
-	})
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("Authorization", accessString, 60, "", "", true, true)
+	c.SetCookie("Refresh", encodedRefresh, 3600, "", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{})
 }
