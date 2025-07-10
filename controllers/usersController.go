@@ -11,6 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/shardofarc/go-auth-jwt/initializers"
 	"github.com/shardofarc/go-auth-jwt/models"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func CreateUser(c *gin.Context) {
@@ -72,12 +73,14 @@ func GenerateTokens(c *gin.Context) {
 		return
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
 		"sub": user.ID,
-		"exp": time.Now().Add(time.Minute * 5).Unix(),
+		"num": user.UserGuid,
+		"exp": time.Now().Add(time.Minute).Unix(),
 	})
 
-	tokenString, err := token.SignedString([]byte(os.Getenv("KEY")))
+	accessString, err := accessToken.SignedString([]byte(os.Getenv("KEY")))
+	refreshString := time.Now().Add(time.Hour).Format("2006/01/02 03:04")
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -87,7 +90,29 @@ func GenerateTokens(c *gin.Context) {
 		return
 	}
 
+	refreshHash, err := bcrypt.GenerateFromPassword([]byte(refreshString), 10)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to create tokens",
+		})
+
+		return
+	}
+
+	user.Refresh = string(refreshHash)
+	result := initializers.DB.Save(&user)
+
+	if result.Error != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to save refresh",
+		})
+
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"access": tokenString,
+		"access":  accessString,
+		"refresh": refreshString,
 	})
 }

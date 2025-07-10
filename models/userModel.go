@@ -7,5 +7,5 @@ import (
 type User struct {
 	gorm.Model
 	UserGuid string `gorm:"unique"`
-	Refresh  []byte
+	Refresh  string
 }
