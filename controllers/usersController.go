@@ -52,6 +52,21 @@ func GetUsers(c *gin.Context) {
 	})
 }
 
+func GetGuid(c *gin.Context) {
+	user := c.MustGet("user").(models.User)
+
+	if user.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"guid": user.UserGuid,
+	})
+}
+
 func GenerateTokens(c *gin.Context) {
 	var body struct {
 		UserGuid string
@@ -90,6 +105,8 @@ func GenerateTokens(c *gin.Context) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("Authorization", accessToken, 3600, "", "", true, true)
 	c.SetCookie("Refresh", encodedRefresh, 3600, "", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{})
 }
 
 func Refresh(c *gin.Context) {
@@ -152,6 +169,15 @@ func Refresh(c *gin.Context) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("Authorization", newAccessToken, 3600, "", "", true, true)
 	c.SetCookie("Refresh", encodedNewRefresh, 3600, "", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func Deauthorize(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("Authorization", "", 0, "", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{})
 }
 
 func createTokens(user models.User, c *gin.Context) (string, string, error) {

@@ -20,6 +20,8 @@ func main() {
 	r.GET("/getUsers", controllers.GetUsers)
 	r.GET("/generateTokens", controllers.GenerateTokens)
 	r.GET("/refresh", middleware.RequireAuth, controllers.Refresh)
+	r.GET("/getGuid", middleware.RequireAuth, controllers.GetGuid)
+	r.GET("/deauthorize", controllers.Deauthorize)
 
 	r.Run()
 }
