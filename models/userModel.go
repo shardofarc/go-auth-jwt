@@ -8,4 +8,5 @@ type User struct {
 	gorm.Model
 	UserGuid string `gorm:"unique"`
 	Refresh  string
+	WEBHOOK  string
 }

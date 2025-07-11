@@ -43,11 +43,9 @@ func RequireAuth(c *gin.Context) {
 			return
 		}
 
-		if c.ClientIP() != claims["uip"] {
-		}
-
 		c.Set("user", user)
 		c.Set("userAgent", claims["age"])
+		c.Set("userIp", claims["uip"])
 
 		c.Next()
 	} else {

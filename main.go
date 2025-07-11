@@ -18,6 +18,7 @@ func main() {
 
 	r.POST("/createUser", controllers.CreateUser)
 	r.GET("/getUsers", controllers.GetUsers)
+	r.POST("/setWebhookForUser", controllers.SetWebhook)
 	r.GET("/generateTokens", controllers.GenerateTokens)
 	r.GET("/refresh", middleware.RequireAuth, controllers.Refresh)
 	r.GET("/getGuid", middleware.RequireAuth, controllers.GetGuid)

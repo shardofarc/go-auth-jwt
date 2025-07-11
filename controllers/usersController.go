@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/shardofarc/go-auth-jwt/initializers"
 	"github.com/shardofarc/go-auth-jwt/models"
+	"github.com/shardofarc/go-auth-jwt/webhooks"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -61,9 +62,36 @@ func GetGuid(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"guid":    user.UserGuid,
-		"message": c.Request.UserAgent(),
+		"guid": user.UserGuid,
 	})
+}
+
+func SetWebhook(c *gin.Context) {
+	var body struct {
+		UserGuid string
+		Webhook  string
+	}
+
+	if c.ShouldBindBodyWithJSON(&body) != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to read body",
+		})
+	}
+
+	var user models.User
+	initializers.DB.First(&user, "user_guid = ?", body.UserGuid)
+
+	if user.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to find user",
+		})
+		return
+	}
+
+	user.WEBHOOK = body.Webhook
+	initializers.DB.Save(&user)
+
+	c.JSON(http.StatusOK, gin.H{})
 }
 
 func GenerateTokens(c *gin.Context) {
@@ -77,7 +105,6 @@ func GenerateTokens(c *gin.Context) {
 		})
 	}
 
-	fmt.Println("guid: " + body.UserGuid)
 	var user models.User
 	initializers.DB.First(&user, "user_guid = ?", body.UserGuid)
 
@@ -121,6 +148,17 @@ func Refresh(c *gin.Context) {
 	refreshToken := string(refreshTokenBytes)
 	user := c.MustGet("user").(models.User)
 	accessUserAgent := c.MustGet("userAgent").(string)
+	userIp := c.MustGet("userIp").(string)
+
+	if userIp == c.ClientIP() {
+		err := webhooks.SendMessage(user.UserGuid, c.ClientIP(), user.WEBHOOK)
+
+		if err != nil {
+			c.JSON(http.StatusFailedDependency, gin.H{
+				"error": "Could not send message to webhook",
+			})
+		}
+	}
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -129,7 +167,7 @@ func Refresh(c *gin.Context) {
 		return
 	}
 
-	if strings.Compare(refreshToken, accessToken[strings.LastIndexByte(accessToken, '.'):strings.LastIndexByte(accessToken, '.')+72]) != 0 {
+	if refreshToken != accessToken[strings.LastIndexByte(accessToken, '.'):strings.LastIndexByte(accessToken, '.')+72] {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid pair of tokens",
 		})
@@ -143,7 +181,7 @@ func Refresh(c *gin.Context) {
 		return
 	}
 
-	if strings.Compare(accessUserAgent, c.Request.UserAgent()) != 0 {
+	if accessUserAgent != c.Request.UserAgent() {
 		deauth(c)
 
 		c.JSON(http.StatusBadRequest, gin.H{
