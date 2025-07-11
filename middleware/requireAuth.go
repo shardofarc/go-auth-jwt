@@ -47,6 +47,7 @@ func RequireAuth(c *gin.Context) {
 		}
 
 		c.Set("user", user)
+		c.Set("userAgent", claims["age"])
 
 		c.Next()
 	} else {

@@ -28,7 +28,6 @@ func CreateUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to create user",
 		})
-
 		return
 	}
 
@@ -43,7 +42,6 @@ func GetUsers(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to find users",
 		})
-
 		return
 	}
 
@@ -63,7 +61,8 @@ func GetGuid(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"guid": user.UserGuid,
+		"guid":    user.UserGuid,
+		"message": c.Request.UserAgent(),
 	})
 }
 
@@ -86,7 +85,6 @@ func GenerateTokens(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to find user",
 		})
-
 		return
 	}
 
@@ -96,7 +94,6 @@ func GenerateTokens(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to create tokens",
 		})
-
 		return
 	}
 
@@ -123,6 +120,7 @@ func Refresh(c *gin.Context) {
 	refreshTokenBytes, err := base64.StdEncoding.DecodeString(encodedRefresh)
 	refreshToken := string(refreshTokenBytes)
 	user := c.MustGet("user").(models.User)
+	accessUserAgent := c.MustGet("userAgent").(string)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -145,6 +143,17 @@ func Refresh(c *gin.Context) {
 		return
 	}
 
+	if strings.Compare(accessUserAgent, c.Request.UserAgent()) != 0 {
+		deauth(c)
+
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid userAgent",
+		})
+		return
+	}
+
+	fmt.Println("here")
+
 	err = bcrypt.CompareHashAndPassword([]byte(user.Refresh), []byte(refreshToken))
 
 	if err != nil {
@@ -160,7 +169,6 @@ func Refresh(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to create tokens",
 		})
-
 		return
 	}
 
@@ -174,8 +182,7 @@ func Refresh(c *gin.Context) {
 }
 
 func Deauthorize(c *gin.Context) {
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", "", 0, "", "", true, true)
+	deauth(c)
 
 	c.JSON(http.StatusOK, gin.H{})
 }
@@ -184,6 +191,7 @@ func createTokens(user models.User, c *gin.Context) (string, string, error) {
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
 		"sub": user.ID,
 		"num": user.UserGuid,
+		"age": c.Request.UserAgent(),
 		"uip": c.ClientIP(),
 		"exp": time.Now().Add(time.Minute).Unix(),
 	})
@@ -209,4 +217,9 @@ func createTokens(user models.User, c *gin.Context) (string, string, error) {
 	}
 
 	return accessString, refreshString, nil
+}
+
+func deauth(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("Authorization", "", 0, "", "", true, true)
 }
