@@ -75,25 +75,7 @@ func GenerateTokens(c *gin.Context) {
 		return
 	}
 
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
-		"sub": user.ID,
-		"num": user.UserGuid,
-		"uip": c.ClientIP(),
-		"exp": time.Now().Add(time.Minute).Unix(),
-	})
-
-	accessString, err := accessToken.SignedString([]byte(os.Getenv("KEY")))
-	refreshString := time.Now().Add(time.Hour).Format("2006/01/02 03:04") + "." + accessString[:strings.IndexByte(accessString, '.')]
-
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to create token",
-		})
-
-		return
-	}
-
-	refreshHash, err := bcrypt.GenerateFromPassword([]byte(refreshString), 10)
+	accessToken, refreshToken, err := createTokens(user, c)
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -103,26 +85,102 @@ func GenerateTokens(c *gin.Context) {
 		return
 	}
 
-	user.Refresh = string(refreshHash)
-	result := initializers.DB.Save(&user)
+	encodedRefresh := base64.StdEncoding.EncodeToString([]byte(refreshToken))
 
-	if result.Error != nil {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("Authorization", accessToken, 3600, "", "", true, true)
+	c.SetCookie("Refresh", encodedRefresh, 3600, "", "", true, true)
+}
+
+func Refresh(c *gin.Context) {
+	accessToken, err := c.Cookie("Authorization")
+	encodedRefresh, err2 := c.Cookie("Refresh")
+
+	if err != nil || accessToken == "" || err2 != nil || encodedRefresh == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to save refresh",
+			"error": "Failed to find tokens",
+		})
+		return
+	}
+
+	refreshTokenBytes, err := base64.StdEncoding.DecodeString(encodedRefresh)
+	refreshToken := string(refreshTokenBytes)
+	user := c.MustGet("user").(models.User)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid refresh token",
+		})
+		return
+	}
+
+	if strings.Compare(refreshToken, accessToken[strings.LastIndexByte(accessToken, '.'):strings.LastIndexByte(accessToken, '.')+72]) != 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid pair of tokens",
+		})
+		return
+	}
+
+	if user.ID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid user",
+		})
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(user.Refresh), []byte(refreshToken))
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid refresh token",
+		})
+		return
+	}
+
+	newAccessToken, newRefreshToken, err := createTokens(user, c)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to create tokens",
 		})
 
 		return
 	}
 
-	encodedRefresh := base64.StdEncoding.EncodeToString([]byte(refreshString))
+	encodedNewRefresh := base64.StdEncoding.EncodeToString([]byte(newRefreshToken))
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", accessString, 3600, "", "", true, true)
-	c.SetCookie("Refresh", encodedRefresh, 3600, "", "", true, true)
+	c.SetCookie("Authorization", newAccessToken, 3600, "", "", true, true)
+	c.SetCookie("Refresh", encodedNewRefresh, 3600, "", "", true, true)
 }
 
-func Validate(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Logged in",
+func createTokens(user models.User, c *gin.Context) (string, string, error) {
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS512, jwt.MapClaims{
+		"sub": user.ID,
+		"num": user.UserGuid,
+		"uip": c.ClientIP(),
+		"exp": time.Now().Add(time.Minute).Unix(),
 	})
+
+	accessString, err := accessToken.SignedString([]byte(os.Getenv("KEY")))
+	refreshString := accessString[strings.LastIndexByte(accessString, '.') : strings.LastIndexByte(accessString, '.')+72]
+
+	if err != nil {
+		return "", "", err
+	}
+
+	refreshHash, err := bcrypt.GenerateFromPassword([]byte(refreshString), 10)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	user.Refresh = string(refreshHash)
+	result := initializers.DB.Save(&user)
+
+	if result.Error != nil {
+		return "", "", err
+	}
+
+	return accessString, refreshString, nil
 }
