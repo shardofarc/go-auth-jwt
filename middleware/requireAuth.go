@@ -1,8 +1,6 @@
 package middleware
 
 import (
-	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -15,17 +13,20 @@ import (
 
 func RequireAuth(c *gin.Context) {
 	accessToken, err := c.Cookie("Authorization")
+	refreshToken, err2 := c.Cookie("Refresh")
 
-	if err != nil {
+	if err != nil || accessToken == "" || err2 != nil || refreshToken == "" {
 		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
-	fmt.Println(accessToken)
 
 	token, err := jwt.Parse(accessToken, func(token *jwt.Token) (interface{}, error) {
 		return []byte(os.Getenv("KEY")), nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS512.Alg()}))
+
 	if err != nil {
-		log.Fatal(err)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
@@ -34,16 +35,22 @@ func RequireAuth(c *gin.Context) {
 
 		if user.ID == 0 {
 			c.AbortWithStatus(http.StatusUnauthorized)
+			return
 		}
 
 		if float64(time.Now().Unix()) > claims["exp"].(float64) {
 			c.AbortWithStatus(http.StatusUnauthorized)
-
-			c.Set("user", user)
+			return
 		}
+
+		if c.ClientIP() != claims["uip"] {
+		}
+
+		c.Set("user", user)
 
 		c.Next()
 	} else {
 		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
 }

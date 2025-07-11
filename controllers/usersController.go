@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/beevik/guid"
@@ -82,7 +83,7 @@ func GenerateTokens(c *gin.Context) {
 	})
 
 	accessString, err := accessToken.SignedString([]byte(os.Getenv("KEY")))
-	refreshString := time.Now().Add(time.Hour).Format("2006/01/02 03:04")
+	refreshString := time.Now().Add(time.Hour).Format("2006/01/02 03:04") + "." + accessString[:strings.IndexByte(accessString, '.')]
 
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -116,10 +117,8 @@ func GenerateTokens(c *gin.Context) {
 	encodedRefresh := base64.StdEncoding.EncodeToString([]byte(refreshString))
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", accessString, 60, "", "", true, true)
+	c.SetCookie("Authorization", accessString, 3600, "", "", true, true)
 	c.SetCookie("Refresh", encodedRefresh, 3600, "", "", true, true)
-
-	c.JSON(http.StatusOK, gin.H{})
 }
 
 func Validate(c *gin.Context) {
